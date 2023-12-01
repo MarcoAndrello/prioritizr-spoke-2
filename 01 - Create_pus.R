@@ -7,20 +7,19 @@ library(sf)
 library(tidyverse)
 library(units)
 
-# Define extent of planning region (domain) from long-lat coordinates in WGS84 CRS
-region <- st_sfc(
-    st_polygon(
-        list(rbind(c(-5.5,29), c(36.5,29), c(36.5,45), c(-5.5,45), c(-5.5,29)))
-    ),
-    crs=st_crs(4326))
+# Read shapefile of pilot area
+pa <- st_read(paste0(getwd(),"/data/SoS_pilot_area.shp"))
 
-# Transform to Albers Equal Area CRS - to get planning units of the same area (otherwise southern PUs will be larger in long-lat CRS)
-region <- st_transform(region, crs=st_crs("ESRI:102013"))
-# EPSG:19986 Lambers equal area recommended by the EU
+# Make planning unit geometries
+st_make_grid(st_bbox(pa),cellsize=5000) %>% # rectangular grid
+  vect %>% crop(vect(pa)) %>% # convert to SpatVect to use terra::crop
+  st_as_sf -> pus # convert back to sf
+plot(pus)
 
-# Make planning units
-st_make_grid(region,cellsize=10000) %>% st_sf() -> pus
-rm(region)
+# Caluclate area
+pus$AREA <- st_area(pus)
+plot(pus["AREA"])
+
 
 # Read ETOPO1 depth data
 etopo1 <- rast("C:/Users/marco/Il mio Drive/Maps/ETOPO1-ice-Mediterranean.tif")
@@ -30,10 +29,10 @@ terra::extract(etopo1, pu_coord_4326) -> depth
 # Add depth to pus
 pus$depth <- depth$`ETOPO1-ice-Mediterranean`
 # remove land cells
-pus %>% filter(depth < 0) -> pus_temp 
-st_write(pus_temp, dsn="pus_temp.shp")
-# In QGis, delete cells out of domain
-pus <- st_read("pus_temp.shp")
+pus %>% filter(depth < 0) -> pus_temp
+# st_write(pus_temp, dsn="pus_temp.shp")
+# # In QGis, delete cells out of domain
+# pus <- st_read("pus_temp.shp")
 pus$ID <- 1:nrow(pus)
 rm(etopo1, pu_coord_4326, pus_temp, depth)
 
@@ -90,8 +89,37 @@ pus %>%
 # Read Fishmed data
 FishMed_grid <- read.csv(paste0(getwd(),"/../Genetic SCP Diplodus Mullus/data/Albouy et al 2015 FishMed/Observed_grid_1980.csv"),h=T,sep=";")
 FishMed_grid <- rast(FishMed_grid, type="xyz", crs="EPSG:4326")
-pus %>% st_geometry %>% st_centroid %>% st_transform(crs=st_crs(4326)) %>% st_coordinates() %>% terra::extract(FishMed_grid, .) -> whole_Med_presence
-pus <- cbind(pus, whole_Med_presence)
+pus %>% st_geometry %>% st_centroid %>% st_transform(crs=st_crs(4326)) %>% st_coordinates() %>% terra::extract(FishMed_grid, .) -> species_presence
+pus <- cbind(pus, species_presence)
+
+feature_names <- names(FishMed_grid)
+
+# Descriptive statistics
+# Add species richness
+pus %>%
+  st_drop_geometry %>%
+  select(feature_names) %>%
+  rowSums %>%
+  mutate(pus, richness=.) -> pus
+plot(pus["richness"])
+
+# Calculate area (number of cells) of local spatial distribution for each species
+pus %>%
+  st_drop_geometry %>%
+  select(feature_names) %>%
+  colSums(na.rm=T) ->
+local_area
+hist(local_area)
+hist(local_area/nrow(pus)) # few species spread over all the pilot area, but most have a restricted distribution 
+
+# Calculate area (number of cells) of spatial distribution in the whole Mediterranean for each species
+global(FishMed_grid, "sum", na.rm=T) %>% pull(sum) -> med_area
+hist(med_area)
+hist(med_area / ncell(FishMed_grid))
 
 # Save
-save(pus,pus_centroid,file="Planning_units.RData")
+save(pus, pus_centroid,
+     feature_names,
+     local_area, med_area,
+     file="Planning_units_SoS.RData")
+
