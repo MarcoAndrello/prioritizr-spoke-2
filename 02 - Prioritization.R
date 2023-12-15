@@ -97,6 +97,7 @@ absolute_global_area = 70 * med_area
 hist(absolute_global_area)
 ### now find range area to target relationship 
 ## there was a publication for setting targets
+# https://www.sciencedirect.com/science/article/pii/S0006320723003191
 
 plot(cbind(seq(0.1,1,0.1),relative_targets),type="l", xlab="Distribution range (relative)", ylab="Representation target (relative)")
 relative_targets_species <- relative_targets[cut(relative_global_area,breaks=seq(0,1,0.1))]
