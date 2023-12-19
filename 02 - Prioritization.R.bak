@@ -8,6 +8,12 @@ library(prioritizr)
 library(tmap)
 library(rnaturalearth)
 
+# p1: with cost from Mazor
+# p3: No cost + boundary penalty
+# p4: No cost + connectivity penalty
+# p5: No cost + representation targets proportional to species distributon range
+# p6: like p1 but maximal coverage
+# p7: like p1 but locking in existing PAs
 
 
 load("Planning_units_SoS.RData")
